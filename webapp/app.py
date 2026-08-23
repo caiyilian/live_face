@@ -25,7 +25,6 @@ print("Loading EmotiEffLib model (CUDA)...")
 model = EmotiEffLibRecognizerTorch(model_name="enet_b0_8_best_vgaf", device="cuda")
 model.model.eval()
 print("Model loaded.")
-discover_esp()
 
 # MediaPipe Face Detection (CPU, 新版 tasks API)
 model_path = os.path.join(os.path.dirname(__file__), "blaze_face_short_range.tflite")
@@ -98,6 +97,9 @@ def send_emotion_to_esp(emotion_name):
         )
     except Exception:
         pass
+
+discover_esp()
+
 for fp in ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf", "C:/Windows/Fonts/simsun.ttc"]:
     try:
         font_cn = ImageFont.truetype(fp, FONT_SIZE, encoding="unic")

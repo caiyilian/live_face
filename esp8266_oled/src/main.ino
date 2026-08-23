@@ -1,5 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -32,7 +33,7 @@ void drawHappy(int cx, int cy) {
   drawFace(cx, cy, 28);
   drawEyes(cx, cy, 5);
   display.drawCircle(cx, cy + 6, 12, SSD1306_WHITE);
-  display.fillRect(cx - 12, cy + 6, 24, 12, SSD1306_BLACK);
+  display.fillRect(cx - 12, cy + 6 - 12, 24, 13, SSD1306_BLACK);
 }
 
 void drawSad(int cx, int cy) {
@@ -191,6 +192,10 @@ void setup() {
   Serial.println(WiFi.localIP());
   Serial.print("PC IP: ");
   Serial.println(PC_IP);
+
+  if (MDNS.begin("esp8266")) {
+    Serial.println("mDNS: http://esp8266.local");
+  }
 
   showEmotion("HAPPY");
 
