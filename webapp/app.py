@@ -137,7 +137,7 @@ def generate_frames():
                 emotion = face.get("emotion", "?")
                 conf = face.get("confidence_label", 0.0)
                 emotion_cn = EMOTION_CN.get(emotion, emotion)
-                label = f"{emotion_cn} ({conf:.0%})"
+                label = emotion_cn
 
                 draw.rectangle([x, y, x + bw, y + bh], outline=(0, 255, 0), width=2)
                 if font_cn:
