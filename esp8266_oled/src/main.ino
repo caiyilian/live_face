@@ -197,6 +197,19 @@ void setup() {
     Serial.println("mDNS: http://esp8266.local");
   }
 
+  // 在 OLED 上显示 IP 地址 3 秒
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(10, 16);
+  display.println("IP:");
+  display.setCursor(10, 30);
+  display.println(WiFi.localIP());
+  display.setCursor(10, 44);
+  display.println("http://esp8266.local");
+  display.display();
+  delay(3000);
+
   showEmotion("HAPPY");
 
   server.on("/", []() {
