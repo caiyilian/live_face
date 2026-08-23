@@ -210,7 +210,49 @@ result = DeepFace.analyze(img_path="face.jpg", actions=['emotion'])
 
 ---
 
-## 5. 推荐方案
+## 5. 真实图片性能测试
+
+使用 `images/happy.png` 和 `images/sad.png` 两张图片，测试**单帧推理速度 + 准确率 + GPU 显存**。
+
+### 测试方法
+- MTCNN 检测人脸 → 裁剪人脸 → 送入各模型推理
+- 每张图跑 30 次取平均（不含 warmup）
+- 显存: PyTorch 用 `torch.cuda.max_memory_allocated()`；TF 项目跑 CPU 不统计
+
+### 结果汇总
+
+| 项目 | happy.png | sad.png | 耗时 | 显存 | 运行位置 |
+|------|-----------|---------|:----:|:----:|:--------:|
+| **EmotiEffLib** (EfficientNet B0) | ✅ Happiness | ✅ Sadness | **~20ms** | 103MB | GPU |
+| **OpenFace-3.0 MLT** (多任务) | ✅ Happy (36%) | ✅ Sad (90%) | **~17ms** | 134MB | GPU |
+| **deepface** (VGG-Face emotion) | ✅ Happy (100%) | ❌ Angry (49%) | **~170ms** | N/A | CPU |
+| **face-api.js** (SSD+CNN) | ✅ happy (100%) | ✅ sad (100%) | **~10s** | N/A | CPU (Node.js) |
+
+### 分析
+
+**EmotiEffLib**:
+- 识别正确 ✅✅，最快之一（~20ms=50fps）
+- 显存仅 103MB，CPU 也能跑（但慢）
+- sadness 的置信度较低（0.06%），但预测标签正确
+
+**OpenFace-3.0 MLT**:
+- 识别正确 ✅✅，最快（~17ms=59fps）
+- 显存 134MB，多了 gaze 和 AU 输出
+- 额外输出: gaze (yaw/pitch), 8 个 AU 强度值
+
+**deepface**:
+- happy 正确 ✅，但 sad 误判为 angry ❌（FER2013 模型精度不足）
+- 最慢 ~170ms（TF CPU + mtcnn 检测），约 6fps
+- 如果想用 GPU 加速，需安装 tensorflow 的 GPU 版本
+
+**face-api.js**:
+- 识别正确 ✅✅，和 deepface 同源模型但表现更好
+- 纯 JS 后端极慢（~10s），因为 `@tensorflow/tfjs-node` 原生绑定在 Node.js v24 不兼容
+- **在浏览器中**（WebGL/WebGPU）预计能达到 50-100ms/帧
+
+---
+
+## 6. 推荐方案
 
 | 场景 | 推荐项目 | 理由 |
 |------|----------|------|
