@@ -6,6 +6,7 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import sys, cv2, torch, numpy as np
 import atexit
 import logging
+import requests
 import mediapipe as mp
 from PIL import Image, ImageDraw, ImageFont
 from flask import Flask, render_template, Response
@@ -24,6 +25,7 @@ print("Loading EmotiEffLib model (CUDA)...")
 model = EmotiEffLibRecognizerTorch(model_name="enet_b0_8_best_vgaf", device="cuda")
 model.model.eval()
 print("Model loaded.")
+discover_esp()
 
 # MediaPipe Face Detection (CPU, 新版 tasks API)
 model_path = os.path.join(os.path.dirname(__file__), "blaze_face_short_range.tflite")
@@ -47,6 +49,55 @@ EMOTION_CN = {
 # 中文字体（Windows 系统自带）
 FONT_SIZE = 20
 font_cn = None
+
+# ESP8266 配置
+ESP_IP = "192.168.0.106"
+EMOTION_TO_ESP = {
+    "Anger": "ANGRY", "Angry": "ANGRY",
+    "Contempt": "HAPPY",
+    "Disgust": "DISGUST", "Disgusted": "DISGUST",
+    "Fear": "FEAR", "Fearful": "FEAR",
+    "Happiness": "HAPPY", "Happy": "HAPPY",
+    "Neutral": "NEUTRAL",
+    "Sadness": "SAD", "Sad": "SAD",
+    "Surprise": "SURPRISE", "Surprised": "SURPRISE",
+}
+
+
+def discover_esp():
+    global ESP_IP
+    # 尝试从 esp_ip.txt 读取
+    ip_file = os.path.join(os.path.dirname(__file__), "esp_ip.txt")
+    if os.path.exists(ip_file):
+        with open(ip_file) as f:
+            ESP_IP = f.read().strip()
+            print(f"ESP IP from file: {ESP_IP}")
+            return
+    # 尝试通过常见 IP 发现
+    base = "192.168.0."
+    for i in range(100, 120):
+        ip = base + str(i)
+        try:
+            r = requests.get(f"http://{ip}/esp_ip", timeout=0.3)
+            if r.status_code == 200:
+                ESP_IP = ip
+                print(f"ESP discovered at: {ESP_IP}")
+                return
+        except Exception:
+            pass
+    print(f"ESP not found, using default: {ESP_IP}")
+
+
+def send_emotion_to_esp(emotion_name):
+    esp_name = EMOTION_TO_ESP.get(emotion_name, "HAPPY")
+    try:
+        requests.post(
+            f"http://{ESP_IP}/emotion",
+            json={"emotion": esp_name},
+            timeout=0.5,
+        )
+    except Exception:
+        pass
 for fp in ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf", "C:/Windows/Fonts/simsun.ttc"]:
     try:
         font_cn = ImageFont.truetype(fp, FONT_SIZE, encoding="unic")
@@ -123,6 +174,8 @@ def generate_frames():
                             emotion = "?"
                             conf_val = 0.0
                         new_faces.append({"box": (x, y, bw, bh), "emotion": emotion, "confidence_label": conf_val})
+                if new_faces:
+                    send_emotion_to_esp(new_faces[0]["emotion"])
                 last_faces = new_faces
             except Exception:
                 last_faces = []
