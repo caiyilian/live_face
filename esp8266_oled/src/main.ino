@@ -155,7 +155,7 @@ const bo=document.getElementById('btnOpen'),bs=document.getElementById('btnStart
 const st=document.getElementById('status');
 let ms=null,ir=false;
 bo.addEventListener('click',async()=>{
-try{ms=await navigator.mediaDevices.getUserMedia({video:true});v.srcObject=ms;ph.style.display='none';v.classList.add('show');si.style.display='none';bo.disabled=true;bs.disabled=false;st.textContent='\u6444\u50cf\u5934\u5df2\u6253\u5f00';\u70b9\u51fb\u201c\u5f00\u542f\u8868\u60c5\u8bc6\u522b\u201d\u5f00\u59cb\u8bc6\u522b'}catch(e){st.textContent='\u65e0\u6cd5\u6253\u5f00\u6444\u50cf\u5934: '+e.message}});
+try{ms=await navigator.mediaDevices.getUserMedia({video:true});v.srcObject=ms;ph.style.display='none';v.classList.add('show');si.style.display='none';bo.disabled=true;bs.disabled=false;st.textContent='\u6444\u50cf\u5934\u5df2\u6253\u5f00\uff0c\u70b9\u51fb\u201c\u5f00\u542f\u8868\u60c5\u8bc6\u522b\u201d\u5f00\u59cb\u8bc6\u522b'}catch(e){st.textContent='\u65e0\u6cd5\u6253\u5f00\u6444\u50cf\u5934: '+e.message}});
 bs.addEventListener('click',()=>{
 if(!ms)return;ms.getTracks().forEach(t=>t.stop());ms=null;v.classList.remove('show');ir=true;si.style.display='block';si.src='http://'+PC_IP+':'+PC_PORT+'/video_feed?_t='+Date.now();bs.disabled=true;bt.disabled=false;bo.disabled=true;st.textContent='\u8868\u60c5\u8bc6\u522b\u5df2\u5f00\u542f'});
 bt.addEventListener('click',async()=>{
