@@ -50,3 +50,6 @@ Thumbs.db
 *.log
 webapp/*.log
 
+# ESP8266 WiFi 密码（需手动从 config.example.h 复制）
+esp8266_oled/src/config.h
+
