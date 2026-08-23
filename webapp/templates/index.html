@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>人脸表情识别</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
+  h1 { margin: 20px 0; font-size: 24px; }
+  .container { position: relative; width: 640px; max-width: 100%; min-height: 480px; background: #111; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+  #video, #stream { width: 100%; border-radius: 12px; display: none; }
+  #video.show, #stream.show { display: block; }
+  .placeholder { color: #555; font-size: 16px; }
+  .controls { margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; transition: all .2s; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-primary { background: #0f3460; color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #16213e; }
+  .btn-success { background: #16a34a; color: #fff; }
+  .btn-success:hover:not(:disabled) { background: #15803d; }
+  .btn-danger { background: #dc2626; color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: #b91c1c; }
+  .status { margin-top: 12px; font-size: 14px; color: #94a3b8; }
+  .fps { margin-top: 4px; font-size: 13px; color: #64748b; }
+</style>
+</head>
+<body>
+<h1>人脸表情识别</h1>
+<div class="container">
+  <video id="video" autoplay playsinline></video>
+  <img id="stream" style="display:none">
+  <span class="placeholder" id="placeholder">摄像头未开启</span>
+</div>
+<div class="controls">
+  <button id="btnOpen" class="btn btn-primary">打开摄像头</button>
+  <button id="btnStart" class="btn btn-success" disabled>开启表情识别</button>
+  <button id="btnStop" class="btn btn-danger" disabled>停止</button>
+</div>
+<div class="status" id="status">等待操作...</div>
+<div class="fps" id="fps"></div>
+
+<script>
+const video = document.getElementById('video');
+const streamImg = document.getElementById('stream');
+const placeholder = document.getElementById('placeholder');
+const btnOpen = document.getElementById('btnOpen');
+const btnStart = document.getElementById('btnStart');
+const btnStop = document.getElementById('btnStop');
+const status = document.getElementById('status');
+const fps = document.getElementById('fps');
+
+let mediaStream = null;
+let isRecognizing = false;
+
+btnOpen.addEventListener('click', async () => {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = mediaStream;
+    placeholder.style.display = 'none';
+    video.classList.add('show');
+    streamImg.style.display = 'none';
+    btnOpen.disabled = true;
+    btnStart.disabled = false;
+    status.textContent = '摄像头已打开，点击"开启表情识别"开始识别';
+  } catch (e) {
+    status.textContent = '无法打开摄像头: ' + e.message;
+  }
+});
+
+btnStart.addEventListener('click', () => {
+  if (!mediaStream) return;
+  mediaStream.getTracks().forEach(t => t.stop());
+  mediaStream = null;
+  video.classList.remove('show');
+  isRecognizing = true;
+  streamImg.style.display = 'block';
+  streamImg.src = '/video_feed?_t=' + Date.now();
+  btnStart.disabled = true;
+  btnStop.disabled = false;
+  btnOpen.disabled = true;
+  status.textContent = '表情识别已开启';
+  fps.textContent = '';
+  measureFps();
+});
+
+btnStop.addEventListener('click', async () => {
+  isRecognizing = false;
+  streamImg.style.display = 'none';
+  streamImg.src = '';
+  await fetch('/stop');
+  fps.textContent = '';
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = mediaStream;
+    video.classList.add('show');
+    btnOpen.disabled = true;
+    btnStart.disabled = false;
+    btnStop.disabled = true;
+    status.textContent = '摄像头已恢复';
+  } catch (e) {
+    btnOpen.disabled = false;
+    btnStart.disabled = true;
+    btnStop.disabled = true;
+    status.textContent = '请重新打开摄像头';
+  }
+});
+
+function measureFps() {
+  if (!isRecognizing) return;
+  let count = 0;
+  const start = performance.now();
+  const check = () => {
+    if (!isRecognizing) return;
+    const img = streamImg;
+    if (img.complete) count++;
+    if (performance.now() - start < 3000) {
+      requestAnimationFrame(check);
+    } else {
+      const elapsed = (performance.now() - start) / 1000;
+      fps.textContent = `约 ${(count / elapsed).toFixed(1)} FPS`;
+    }
+  };
+  check();
+}
+</script>
+</body>
+</html>
