@@ -1,12 +1,19 @@
 import os, sys, cv2, torch, numpy as np
 import atexit
+import logging
 import mediapipe as mp
 from flask import Flask, render_template, Response
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "openface3"))
+# 过滤不必要的 warning
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+logging.getLogger("absl").setLevel(logging.ERROR)
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "openface3"))
 
 from emotiefflib.facial_analysis import EmotiEffLibRecognizerTorch
+from mediapipe.tasks.python.vision import FaceDetector, FaceDetectorOptions, RunningMode
+from mediapipe.tasks.python import BaseOptions
 
 app = Flask(__name__)
 
@@ -15,11 +22,14 @@ model = EmotiEffLibRecognizerTorch(model_name="enet_b0_8_best_vgaf", device="cud
 model.model.eval()
 print("Model loaded.")
 
-# MediaPipe Face Detection (CPU, 比 MTCNN 快非常多)
-mp_face_detection = mp.solutions.face_detection
-face_detector = mp_face_detection.FaceDetection(
-    model_selection=0, min_detection_confidence=0.5
+# MediaPipe Face Detection (CPU, 新版 tasks API)
+model_path = os.path.join(os.path.dirname(__file__), "blaze_face_short_range.tflite")
+options = FaceDetectorOptions(
+    base_options=BaseOptions(model_asset_path=model_path),
+    running_mode=RunningMode.IMAGE,
+    min_detection_confidence=0.5,
 )
+face_detector = FaceDetector.create_from_options(options)
 
 camera = None
 frame_skip = 2
@@ -67,19 +77,15 @@ def generate_frames():
         if do_detect:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             try:
-                results = face_detector.process(rgb)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                detection_result = face_detector.detect(mp_image)
                 new_faces = []
-                if results.detections:
-                    h_img, w_img = frame.shape[:2]
-                    for det in results.detections:
-                        bbox = det.location_data.relative_bounding_box
-                        x = int(bbox.xmin * w_img)
-                        y = int(bbox.ymin * h_img)
-                        bw = int(bbox.width * w_img)
-                        bh = int(bbox.height * h_img)
-                        x, y = max(0, x), max(0, y)
-                        bw = min(bw, w_img - x)
-                        bh = min(bh, h_img - y)
+                if detection_result.detections:
+                    for det in detection_result.detections:
+                        bbox = det.bounding_box
+                        x, y = max(0, bbox.origin_x), max(0, bbox.origin_y)
+                        bw = min(bbox.width, frame.shape[1] - x)
+                        bh = min(bbox.height, frame.shape[0] - y)
                         if bw <= 0 or bh <= 0:
                             continue
                         face_crop = frame[y : y + bh, x : x + bw]
