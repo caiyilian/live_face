@@ -27,3 +27,22 @@ Thumbs.db
 *.onnx
 *.tflite
 *.pkl
+
+# 克隆的第三方项目（各自独立，不属于本项目）
+/Deep-Emotion/
+/EfficientFace/
+/EmoPy/
+/FacialExpressionRecognition/
+/WU_FER/
+/deepface/
+/emotiefflib/
+/face_classification/
+/faceapi-js/
+/fer/
+/humanjs/
+/openface3/
+/xiongfer/
+
+# 本地 whl 缓存
+/whl/
+
