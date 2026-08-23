@@ -1,0 +1,29 @@
+# 不要泄露 GitHub token
+github-token.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 模型权重文件（通常很大，后续按需下载）
+*.h5
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.pkl
