@@ -1,13 +1,15 @@
-import os, sys, cv2, torch, numpy as np
+# 过滤不必要的 warning——必须在任何 import 之前设置
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+
+import sys, cv2, torch, numpy as np
 import atexit
 import logging
 import mediapipe as mp
 from PIL import Image, ImageDraw, ImageFont
 from flask import Flask, render_template, Response
 
-# 过滤不必要的 warning
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 logging.getLogger("absl").setLevel(logging.ERROR)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "openface3"))
@@ -43,12 +45,14 @@ EMOTION_CN = {
 }
 
 # 中文字体（Windows 系统自带）
-FONT_PATH = "C:/Windows/Fonts/msyh.ttc"
 FONT_SIZE = 20
-try:
-    font_cn = ImageFont.truetype(FONT_PATH, FONT_SIZE)
-except Exception:
-    font_cn = None
+font_cn = None
+for fp in ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf", "C:/Windows/Fonts/simsun.ttc"]:
+    try:
+        font_cn = ImageFont.truetype(fp, FONT_SIZE, encoding="unic")
+        break
+    except Exception:
+        continue
 
 camera = None
 frame_skip = 2
@@ -124,34 +128,25 @@ def generate_frames():
                 last_faces = []
 
         if last_faces:
-            # 用 Pillow 绘制中文文字（OpenCV 不支持中文）
-            use_pil = font_cn is not None
-            if use_pil:
-                pil_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                draw = ImageDraw.Draw(pil_img)
+            # 全部在 PIL 上绘制（OpenCV 不支持中文，且避免画框被覆盖）
+            pil_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            draw = ImageDraw.Draw(pil_img)
 
             for face in last_faces:
                 x, y, bw, bh = face["box"]
                 emotion = face.get("emotion", "?")
                 conf = face.get("confidence_label", 0.0)
-
-                cv2.rectangle(frame, (x, y), (x + bw, y + bh), (0, 255, 0), 2)
                 emotion_cn = EMOTION_CN.get(emotion, emotion)
+                label = f"{emotion_cn} ({conf:.0%})"
 
-                if use_pil:
-                    label = f"{emotion_cn} ({conf:.0%})"
+                draw.rectangle([x, y, x + bw, y + bh], outline=(0, 255, 0), width=2)
+                if font_cn:
                     bbox = draw.textbbox((0, 0), label, font=font_cn)
                     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
                     draw.rectangle([x, y - th - 6, x + tw + 4, y], fill=(0, 255, 0))
                     draw.text((x + 2, y - th - 4), label, font=font_cn, fill=(0, 0, 0))
-                else:
-                    label = f"{emotion_cn} ({conf:.0%})"
-                    (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2)
-                    cv2.rectangle(frame, (x, y - th - 8), (x + tw, y), (0, 255, 0), -1)
-                    cv2.putText(frame, label, (x, y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 0), 2)
 
-            if use_pil:
-                frame = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+            frame = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
         ret, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
         if not ret:
