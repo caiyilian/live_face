@@ -46,3 +46,7 @@ Thumbs.db
 # 本地 whl 缓存
 /whl/
 
+# 日志文件
+*.log
+webapp/*.log
+
