@@ -91,6 +91,7 @@ btnStart.addEventListener('click', () => {
     try {
       const data = JSON.parse(e.data);
       drawFaces(data.faces || []);
+      if (data.ms) fps.textContent = `${data.ms.toFixed(0)}ms`;
     } catch (err) { /* ignore */ }
     if (isRecognizing) setTimeout(sendFrame, 40);
   };
@@ -114,14 +115,18 @@ btnStop.addEventListener('click', () => {
 });
 
 const capCanvas = document.createElement('canvas');
+const MAX_CAPTURE_WIDTH = 320;
 
 function sendFrame() {
   if (!isRecognizing) return;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  capCanvas.width = video.videoWidth;
-  capCanvas.height = video.videoHeight;
+  // 缩小捕获尺寸大幅提速（JPEG 编码 + 传输 + 后端检测）
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const scale = Math.min(1, MAX_CAPTURE_WIDTH / vw);
+  capCanvas.width = Math.round(vw * scale);
+  capCanvas.height = Math.round(vh * scale);
   const tctx = capCanvas.getContext('2d');
-  tctx.drawImage(video, 0, 0);
+  tctx.drawImage(video, 0, 0, capCanvas.width, capCanvas.height);
   capCanvas.toBlob((blob) => {
     if (!blob) return;
     blob.arrayBuffer().then((buf) => {
@@ -147,7 +152,7 @@ function drawFaces(faces) {
     octx.fillText(label, dx + 4, dy + 20);
   }
   if (faces.length === 0) {
-    fps.textContent = '\u672a\u68c0\u6d4b\u5230\u4eba\u8138';
+    if (!fps.textContent) fps.textContent = '\u672a\u68c0\u6d4b\u5230\u4eba\u8138';
   }
 }
 </script>

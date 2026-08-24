@@ -290,8 +290,8 @@ def analyze_frame(frame):
     try:
         # 缩小帧加速 MediaPipe 检测（骨骼模型对尺寸不敏感）
         h, w = frame.shape[:2]
-        if w > 640:
-            scale = 640.0 / w
+        if w > 320:
+            scale = 320.0 / w
             frame_small = cv2.resize(frame, (int(w * scale), int(h * scale)),
                                      interpolation=cv2.INTER_AREA)
         else:
@@ -334,10 +334,12 @@ def analyze_frame(frame):
 def ws_recognize(ws):
     """WebSocket 实时识别：浏览器发二进制 JPEG 帧，返回 JSON 表情结果"""
     import json as _json
+    import time
     while True:
-        data = ws.receive()  # 二进制帧
+        data = ws.receive()
         if data is None:
             break
+        t0 = time.perf_counter()
         try:
             nparr = np.frombuffer(data, np.uint8)
             frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -346,7 +348,8 @@ def ws_recognize(ws):
         if frame is None:
             continue
         faces = analyze_frame(frame)
-        ws.send(_json.dumps({"faces": faces}))
+        elapsed = (time.perf_counter() - t0) * 1000
+        ws.send(_json.dumps({"faces": faces, "ms": round(elapsed, 1)}))
 
 
 @app.route("/")
