@@ -27,15 +27,15 @@
 </style>
 </head>
 <body>
-<h1>😊 人脸表情识别</h1>
+<h1>人脸表情识别</h1>
 <div class="container">
   <video id="video" autoplay playsinline></video>
   <canvas id="overlay"></canvas>
-  <span class="placeholder" id="placeholder">摄像头未开�?/span>
+  <span class="placeholder" id="placeholder">摄像头未开启</span>
 </div>
 <div class="controls">
-  <button id="btnOpen" class="btn btn-primary">打开摄像�?/button>
-  <button id="btnStart" class="btn btn-success" disabled>开启表情识�?/button>
+  <button id="btnOpen" class="btn btn-primary">打开摄像头</button>
+  <button id="btnStart" class="btn btn-success" disabled>开启表情识别</button>
   <button id="btnStop" class="btn btn-danger" disabled>停止</button>
 </div>
 <div class="status" id="status">等待操作...</div>
@@ -70,9 +70,9 @@ btnOpen.addEventListener('click', async () => {
     video.classList.add('show');
     btnOpen.disabled = true;
     btnStart.disabled = false;
-    status.textContent = '摄像头已打开，点�?开启表情识�?开始识�?;
+    status.textContent = '\u6444\u50cf\u5934\u5df2\u6253\u5f00\uff0c\u70b9\u51fb\u201c\u5f00\u542f\u8868\u60c5\u8bc6\u522b\u201d\u5f00\u59cb\u8bc6\u522b';
   } catch (e) {
-    status.textContent = '无法打开摄像�? ' + e.message;
+    status.textContent = '\u65e0\u6cd5\u6253\u5f00\u6444\u50cf\u5934: ' + e.message;
   }
 });
 
@@ -82,7 +82,7 @@ btnStart.addEventListener('click', () => {
   btnStart.disabled = true;
   btnStop.disabled = false;
   btnOpen.disabled = true;
-  status.textContent = '表情识别已开�?;
+  status.textContent = '\u8868\u60c5\u8bc6\u522b\u5df2\u5f00\u542f';
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -92,15 +92,14 @@ btnStart.addEventListener('click', () => {
       const data = JSON.parse(e.data);
       drawFaces(data.faces || []);
     } catch (err) { /* ignore */ }
-    // 收到结果后立即发下一帧（ack 模式，避免队列堆积导致滞后）
     if (isRecognizing) setTimeout(sendFrame, 40);
   };
   ws.onclose = () => {
-    if (isRecognizing) status.textContent = '连接已断开';
+    if (isRecognizing) status.textContent = '\u8fde\u63a5\u5df2\u65ad\u5f00';
   };
-  ws.onerror = () => { status.textContent = 'WebSocket 连接错误'; };
+  ws.onerror = () => { status.textContent = 'WebSocket \u8fde\u63a5\u9519\u8bef'; };
 
-  // 等连接建立后发送第一�?  ws.onopen = () => sendFrame();
+  ws.onopen = () => sendFrame();
 });
 
 btnStop.addEventListener('click', () => {
@@ -110,18 +109,16 @@ btnStop.addEventListener('click', () => {
   btnStart.disabled = true;
   btnStop.disabled = true;
   btnOpen.disabled = false;
-  status.textContent = '已停止识�?;
+  status.textContent = '\u5df2\u505c\u6b62\u8bc6\u522b';
   fps.textContent = '';
 });
 
-// 复用的截�?canvas
 const capCanvas = document.createElement('canvas');
 
 function sendFrame() {
   if (!isRecognizing) return;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-  // 当前视频�?�?JPEG 二进�?�?WebSocket 直接发送（�?base64 膨胀�?  capCanvas.width = video.videoWidth;
+  capCanvas.width = video.videoWidth;
   capCanvas.height = video.videoHeight;
   const tctx = capCanvas.getContext('2d');
   tctx.drawImage(video, 0, 0);
@@ -150,7 +147,7 @@ function drawFaces(faces) {
     octx.fillText(label, dx + 4, dy + 20);
   }
   if (faces.length === 0) {
-    fps.textContent = '未检测到人脸';
+    fps.textContent = '\u672a\u68c0\u6d4b\u5230\u4eba\u8138';
   }
 }
 </script>
