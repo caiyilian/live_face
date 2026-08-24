@@ -31,11 +31,11 @@
 <div class="container">
   <video id="video" autoplay playsinline></video>
   <canvas id="overlay"></canvas>
-  <span class="placeholder" id="placeholder">摄像头未开启</span>
+  <span class="placeholder" id="placeholder">摄像头未开�?/span>
 </div>
 <div class="controls">
-  <button id="btnOpen" class="btn btn-primary">打开摄像头</button>
-  <button id="btnStart" class="btn btn-success" disabled>开启表情识别</button>
+  <button id="btnOpen" class="btn btn-primary">打开摄像�?/button>
+  <button id="btnStart" class="btn btn-success" disabled>开启表情识�?/button>
   <button id="btnStop" class="btn btn-danger" disabled>停止</button>
 </div>
 <div class="status" id="status">等待操作...</div>
@@ -55,7 +55,6 @@ const octx = overlay.getContext('2d');
 let mediaStream = null;
 let isRecognizing = false;
 let ws = null;
-let timer = null;
 
 function setOverlaySize() {
   overlay.width = video.videoWidth;
@@ -71,9 +70,9 @@ btnOpen.addEventListener('click', async () => {
     video.classList.add('show');
     btnOpen.disabled = true;
     btnStart.disabled = false;
-    status.textContent = '摄像头已打开，点击"开启表情识别"开始识别';
+    status.textContent = '摄像头已打开，点�?开启表情识�?开始识�?;
   } catch (e) {
-    status.textContent = '无法打开摄像头: ' + e.message;
+    status.textContent = '无法打开摄像�? ' + e.message;
   }
 });
 
@@ -83,7 +82,7 @@ btnStart.addEventListener('click', () => {
   btnStart.disabled = true;
   btnStop.disabled = false;
   btnOpen.disabled = true;
-  status.textContent = '表情识别已开启';
+  status.textContent = '表情识别已开�?;
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -93,36 +92,36 @@ btnStart.addEventListener('click', () => {
       const data = JSON.parse(e.data);
       drawFaces(data.faces || []);
     } catch (err) { /* ignore */ }
+    // 收到结果后立即发下一帧（ack 模式，避免队列堆积导致滞后）
+    if (isRecognizing) setTimeout(sendFrame, 40);
   };
   ws.onclose = () => {
     if (isRecognizing) status.textContent = '连接已断开';
   };
   ws.onerror = () => { status.textContent = 'WebSocket 连接错误'; };
 
-  timer = setInterval(sendFrame, 200);
+  // 等连接建立后发送第一�?  ws.onopen = () => sendFrame();
 });
 
 btnStop.addEventListener('click', () => {
   isRecognizing = false;
-  clearInterval(timer);
   if (ws) { ws.close(); ws = null; }
   octx.clearRect(0, 0, overlay.width, overlay.height);
   btnStart.disabled = true;
   btnStop.disabled = true;
   btnOpen.disabled = false;
-  status.textContent = '已停止识别';
+  status.textContent = '已停止识�?;
   fps.textContent = '';
 });
 
-// 复用的截图 canvas
+// 复用的截�?canvas
 const capCanvas = document.createElement('canvas');
 
 function sendFrame() {
-  if (!isRecognizing || !mediaStream) return;
+  if (!isRecognizing) return;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-  // 当前视频帧 → JPEG 二进制 → WebSocket 直接发送（免 base64 膨胀）
-  capCanvas.width = video.videoWidth;
+  // 当前视频�?�?JPEG 二进�?�?WebSocket 直接发送（�?base64 膨胀�?  capCanvas.width = video.videoWidth;
   capCanvas.height = video.videoHeight;
   const tctx = capCanvas.getContext('2d');
   tctx.drawImage(video, 0, 0);

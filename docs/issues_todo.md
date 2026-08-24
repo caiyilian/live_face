@@ -50,6 +50,11 @@
 
 原因：Windows 底层的 mDNS 解析栈 + Bonjour 状态在浏览器层面清理不到，只有重启整个网络解析栈才生效。
 
+**后续再遇（2026-08-24 被只重启后端再次触发）**：
+- 重启后端后 Edge 又打不开 `liveface.local`，而 Chrome 依旧正常
+- **Edge 里直接用 IP**：`https://192.168.0.103`（证书 SAN 已覆盖 IP，同样免警告）— 永远可用
+- 结论：`liveface.local` 适合 Chrome/手机；Edge 有 mDNS 毛病，直接用 IP 最省事
+
 经验：
 - 遇到 Edge + mDNS(.local) 打不开，先别折腾浏览器缓存，直接重启电脑最快
 - 或者换一个没用过的浏览器/无痕窗口确认是不是 mDNS 本身的问题

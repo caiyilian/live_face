@@ -288,14 +288,26 @@ def analyze_frame(frame):
     """检测人脸 + 识别表情，返回 faces 列表，并同步到 ESP8266"""
     faces_out = []
     try:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # 缩小帧加速 MediaPipe 检测（骨骼模型对尺寸不敏感）
+        h, w = frame.shape[:2]
+        if w > 640:
+            scale = 640.0 / w
+            frame_small = cv2.resize(frame, (int(w * scale), int(h * scale)),
+                                     interpolation=cv2.INTER_AREA)
+        else:
+            frame_small = frame
+        rgb = cv2.cvtColor(frame_small, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         detection_result = face_detector.detect(mp_image)
+        h_small, w_small = frame_small.shape[:2]
+        sx, sy = w / w_small, h / h_small
         for det in detection_result.detections:
             bbox = det.bounding_box
-            x, y = max(0, bbox.origin_x), max(0, bbox.origin_y)
-            bw = min(bbox.width, frame.shape[1] - x)
-            bh = min(bbox.height, frame.shape[0] - y)
+            x, y = max(0, int(bbox.origin_x * sx)), max(0, int(bbox.origin_y * sy))
+            bw = int(bbox.width * sx)
+            bh = int(bbox.height * sy)
+            bw = min(bw, frame.shape[1] - x)
+            bh = min(bh, frame.shape[0] - y)
             if bw <= 0 or bh <= 0:
                 continue
             face_crop = frame[y : y + bh, x : x + bw]
