@@ -6,6 +6,7 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import sys, cv2, torch, numpy as np
 import atexit
 import base64
+import re
 import socket
 import logging
 import requests
@@ -117,10 +118,13 @@ def resolve_esp_ip():
 
 
 def _probe_esp(ip):
+    """探测指定 IP 是否为 ESP8266（/esp_ip 必须返回一个 IP 格式的文本）"""
     try:
-        r = requests.get(f"http://{ip}/esp_ip", timeout=0.3)
+        r = requests.get(f"http://{ip}/esp_ip", timeout=0.4)
         if r.status_code == 200:
-            return ip
+            txt = r.text.strip()
+            if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", txt):
+                return ip
     except Exception:
         pass
     return None
@@ -134,11 +138,16 @@ def discover_esp():
             ESP_IP = f.read().strip()
             print(f"ESP IP from file: {ESP_IP}")
             return
-    if resolve_esp_ip():
-        print(f"ESP discovered via mDNS: {ESP_IP}")
-        return
+    # 优先 mDNS（重试几次，等 ESP 的 mDNS 服务广播）
+    for _ in range(5):
+        if resolve_esp_ip():
+            print(f"ESP discovered via mDNS: {ESP_IP}")
+            return
+        import time
+        time.sleep(1)
+    # 回退：全段扫描，且校验响应为 IP 格式（排除路由器等设备）
     base = "192.168.0."
-    with ThreadPoolExecutor(max_workers=50) as ex:
+    with ThreadPoolExecutor(max_workers=80) as ex:
         found = [ip for ip in ex.map(_probe_esp, [base + str(i) for i in range(1, 255)]) if ip]
     if found:
         ESP_IP = found[0]
