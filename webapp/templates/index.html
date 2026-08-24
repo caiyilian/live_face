@@ -8,9 +8,10 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
   h1 { margin: 20px 0; font-size: 24px; }
-  .container { position: relative; width: 640px; max-width: 100%; min-height: 480px; background: #111; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
-  #video, #stream { width: 100%; border-radius: 12px; display: none; }
-  #video.show, #stream.show { display: block; }
+  .container { position: relative; width: 640px; max-width: 100%; min-height: 480px; background: #111; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  #video { width: 100%; border-radius: 12px; display: none; }
+  #video.show { display: block; }
+  #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
   .placeholder { color: #555; font-size: 16px; }
   .controls { margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
   .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; transition: all .2s; }
@@ -26,10 +27,10 @@
 </style>
 </head>
 <body>
-<h1>人脸表情识别</h1>
+<h1>😊 人脸表情识别</h1>
 <div class="container">
   <video id="video" autoplay playsinline></video>
-  <img id="stream" style="display:none">
+  <canvas id="overlay"></canvas>
   <span class="placeholder" id="placeholder">摄像头未开启</span>
 </div>
 <div class="controls">
@@ -42,7 +43,7 @@
 
 <script>
 const video = document.getElementById('video');
-const streamImg = document.getElementById('stream');
+const overlay = document.getElementById('overlay');
 const placeholder = document.getElementById('placeholder');
 const btnOpen = document.getElementById('btnOpen');
 const btnStart = document.getElementById('btnStart');
@@ -50,16 +51,24 @@ const btnStop = document.getElementById('btnStop');
 const status = document.getElementById('status');
 const fps = document.getElementById('fps');
 
+const octx = overlay.getContext('2d');
 let mediaStream = null;
 let isRecognizing = false;
+let timer = null;
+let lastFrameTime = 0;
+
+function setOverlaySize() {
+  overlay.width = video.videoWidth;
+  overlay.height = video.videoHeight;
+}
+video.addEventListener('loadedmetadata', setOverlaySize);
 
 btnOpen.addEventListener('click', async () => {
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
     video.srcObject = mediaStream;
     placeholder.style.display = 'none';
     video.classList.add('show');
-    streamImg.style.display = 'none';
     btnOpen.disabled = true;
     btnStart.disabled = false;
     status.textContent = '摄像头已打开，点击"开启表情识别"开始识别';
@@ -69,59 +78,72 @@ btnOpen.addEventListener('click', async () => {
 });
 
 btnStart.addEventListener('click', () => {
-  if (!mediaStream) return;
-  mediaStream.getTracks().forEach(t => t.stop());
-  mediaStream = null;
-  video.classList.remove('show');
   isRecognizing = true;
-  streamImg.style.display = 'block';
-  streamImg.src = '/video_feed?_t=' + Date.now();
+  setOverlaySize();
   btnStart.disabled = true;
   btnStop.disabled = false;
   btnOpen.disabled = true;
   status.textContent = '表情识别已开启';
-  fps.textContent = '';
-  measureFps();
+  timer = setInterval(recognizeFrame, 400);
 });
 
-btnStop.addEventListener('click', async () => {
+btnStop.addEventListener('click', () => {
   isRecognizing = false;
-  streamImg.style.display = 'none';
-  streamImg.src = '';
-  await fetch('/stop');
+  clearInterval(timer);
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  btnStart.disabled = true;
+  btnStop.disabled = true;
+  btnOpen.disabled = false;
+  status.textContent = '已停止识别';
   fps.textContent = '';
-  try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
-    video.srcObject = mediaStream;
-    video.classList.add('show');
-    btnOpen.disabled = true;
-    btnStart.disabled = false;
-    btnStop.disabled = true;
-    status.textContent = '摄像头已恢复';
-  } catch (e) {
-    btnOpen.disabled = false;
-    btnStart.disabled = true;
-    btnStop.disabled = true;
-    status.textContent = '请重新打开摄像头';
-  }
 });
 
-function measureFps() {
-  if (!isRecognizing) return;
-  let count = 0;
-  const start = performance.now();
-  const check = () => {
-    if (!isRecognizing) return;
-    const img = streamImg;
-    if (img.complete) count++;
-    if (performance.now() - start < 3000) {
-      requestAnimationFrame(check);
-    } else {
-      const elapsed = (performance.now() - start) / 1000;
-      fps.textContent = `约 ${(count / elapsed).toFixed(1)} FPS`;
-    }
-  };
-  check();
+async function recognizeFrame() {
+  if (!isRecognizing || !mediaStream) return;
+
+  // 把当前视频帧画到临时 canvas 并转 base64
+  const temp = document.createElement('canvas');
+  temp.width = video.videoWidth;
+  temp.height = video.videoHeight;
+  const tctx = temp.getContext('2d');
+  tctx.drawImage(video, 0, 0);
+
+  const t0 = performance.now();
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: temp.toDataURL('image/jpeg', 0.8).split(',')[1] }),
+    });
+    const data = await resp.json();
+    drawFaces(data.faces || []);
+    const elapsed = performance.now() - t0;
+    fps.textContent = `约 ${(1000 / elapsed).toFixed(1)} FPS (每次 ${elapsed.toFixed(0)}ms)`;
+  } catch (e) {
+    // 后端未启动或网络错误
+    status.textContent = '识别出错: ' + e.message;
+  }
+}
+
+function drawFaces(faces) {
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  const scaleX = overlay.width / video.videoWidth;
+  const scaleY = overlay.height / video.videoHeight;
+  for (const f of faces) {
+    const [x, y, w, h] = f.box;
+    const dx = x * scaleX, dy = y * scaleY, dw = w * scaleX, dh = h * scaleY;
+    octx.strokeStyle = '#00ff00';
+    octx.lineWidth = 3;
+    octx.strokeRect(dx, dy, dw, dh);
+
+    octx.font = `${Math.max(16, dw / 8)}px sans-serif`;
+    octx.fillStyle = 'rgba(0,255,0,0.85)';
+    const label = f.emotion_cn;
+    octx.fillText(label, dx + 4, dy + 20);
+  }
+  if (faces.length === 0) {
+    fps.textContent = '未检测到人脸';
+  }
 }
 </script>
 </body>

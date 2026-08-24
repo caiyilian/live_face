@@ -106,64 +106,24 @@ void showEmotion(const String& em) {
   display.display();
 }
 
-// ========== HTML 页面（分两段，中间插入 PC_IP） ==========
+// ========== 解析 PC 后端 via mDNS ==========
 
-const char HTML_A[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>人脸表情识别</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,sans-serif;background:#1a1a2e;color:#eee;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
-h1{margin:20px 0;font-size:24px}
-.container{position:relative;width:640px;max-width:100%;min-height:480px;background:#111;border-radius:12px;display:flex;align-items:center;justify-content:center}
-#video,#stream{width:100%;border-radius:12px;display:none}
-#video.show,#stream.show{display:block}
-.placeholder{color:#555;font-size:16px}
-.controls{margin-top:16px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
-.btn{padding:10px 24px;border:none;border-radius:8px;font-size:15px;cursor:pointer;transition:all .2s}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn-primary{background:#0f3460;color:#fff}
-.btn-success{background:#16a34a;color:#fff}
-.btn-danger{background:#dc2626;color:#fff}
-.status{margin-top:12px;font-size:14px;color:#94a3b8}
-</style>
-</head>
-<body>
-<h1>人脸表情识别</h1>
-<div class="container">
-<video id="video" autoplay playsinline></video>
-<img id="stream" style="display:none">
-<span class="placeholder" id="placeholder">摄像头未开启</span>
-</div>
-<div class="controls">
-<button id="btnOpen" class="btn btn-primary">打开摄像头</button>
-<button id="btnStart" class="btn btn-success" disabled>开启表情识别</button>
-<button id="btnStop" class="btn btn-danger" disabled>停止</button>
-</div>
-<div class="status" id="status">等待操作...</div>
-<script>
-const PC_IP = ')rawliteral";
+IPAddress pcIp(0, 0, 0, 0);
+bool pcResolved = false;
 
-const char HTML_B[] PROGMEM = R"rawliteral(';
-const PC_PORT = 5000;
-const v=document.getElementById('video'),si=document.getElementById('stream'),ph=document.getElementById('placeholder');
-const bo=document.getElementById('btnOpen'),bs=document.getElementById('btnStart'),bt=document.getElementById('btnStop');
-const st=document.getElementById('status');
-let ms=null,ir=false;
-bo.addEventListener('click',async()=>{
-try{ms=await navigator.mediaDevices.getUserMedia({video:true});v.srcObject=ms;ph.style.display='none';v.classList.add('show');si.style.display='none';bo.disabled=true;bs.disabled=false;st.textContent='\u6444\u50cf\u5934\u5df2\u6253\u5f00\uff0c\u70b9\u51fb\u201c\u5f00\u542f\u8868\u60c5\u8bc6\u522b\u201d\u5f00\u59cb\u8bc6\u522b'}catch(e){st.textContent='\u65e0\u6cd5\u6253\u5f00\u6444\u50cf\u5934: '+e.message}});
-bs.addEventListener('click',()=>{
-if(!ms)return;ms.getTracks().forEach(t=>t.stop());ms=null;v.classList.remove('show');ir=true;si.style.display='block';si.src='http://'+PC_IP+':'+PC_PORT+'/video_feed?_t='+Date.now();bs.disabled=true;bt.disabled=false;bo.disabled=true;st.textContent='\u8868\u60c5\u8bc6\u522b\u5df2\u5f00\u542f'});
-bt.addEventListener('click',async()=>{
-ir=false;si.style.display='none';si.src='';await fetch('http://'+PC_IP+':'+PC_PORT+'/stop');try{ms=await navigator.mediaDevices.getUserMedia({video:true});v.srcObject=ms;v.classList.add('show');bo.disabled=true;bs.disabled=false;bt.disabled=true;st.textContent='\u6444\u50cf\u5934\u5df2\u6062\u590d'}catch(e){bo.disabled=false;bs.disabled=true;bt.disabled=true;st.textContent='\u8bf7\u91cd\u65b0\u6253\u5f00\u6444\u50cf\u5934'}});
-</script>
-</body>
-</html>
-)rawliteral";
+bool resolvePc() {
+  IPAddress ip;
+  if (WiFi.hostByName(PC_HOSTNAME, ip)) {
+    pcIp = ip;
+    pcResolved = true;
+    Serial.print("PC resolved via mDNS: ");
+    Serial.println(ip);
+    return true;
+  }
+  pcResolved = false;
+  Serial.println("PC not resolved via mDNS");
+  return false;
+}
 
 void setup() {
   Serial.begin(115200);
@@ -190,12 +150,16 @@ void setup() {
 
   Serial.print("ESP IP: ");
   Serial.println(WiFi.localIP());
-  Serial.print("PC IP: ");
-  Serial.println(PC_IP);
+  Serial.print("PC hostname: ");
+  Serial.println(PC_HOSTNAME);
 
   if (MDNS.begin("esp8266")) {
-    Serial.println("mDNS: http://esp8266.local");
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("mDNS: esp8266.local");
   }
+
+  // 解析 PC 后端地址
+  resolvePc();
 
   // 在 OLED 上显示 IP 地址 3 秒
   display.clearDisplay();
@@ -206,15 +170,24 @@ void setup() {
   display.setCursor(10, 30);
   display.println(WiFi.localIP());
   display.setCursor(10, 44);
-  display.println("http://esp8266.local");
+  display.println(pcResolved ? "PC: liveface" : "PC: not found");
   display.display();
   delay(3000);
 
   showEmotion("HAPPY");
 
   server.on("/", []() {
-    String html = FPSTR(HTML_A) + String(PC_IP) + FPSTR(HTML_B);
-    server.send(200, "text/html", html);
+    // 每次访问都重新解析 PC 地址，保证 IP 变了也能跟上
+    resolvePc();
+    if (pcResolved) {
+      String url = "https://" + pcIp.toString();
+      server.sendHeader("Location", url);
+      server.send(302, "text/html", "Redirecting to " + url);
+    } else {
+      server.send(200, "text/html",
+        "<h3>PC 后端未检测到</h3><p>请先启动电脑上的后端服务 (webapp/app.py)</p>"
+        "<p>刷新本页重试</p>");
+    }
   });
 
   server.on("/emotion", HTTP_POST, []() {

@@ -5,11 +5,15 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 import sys, cv2, torch, numpy as np
 import atexit
+import base64
+import socket
 import logging
 import requests
 import mediapipe as mp
+from concurrent.futures import ThreadPoolExecutor
 from PIL import Image, ImageDraw, ImageFont
-from flask import Flask, render_template, Response
+from flask import Flask, render_template, Response, request, jsonify
+from zeroconf import Zeroconf, ServiceInfo, IPVersion
 
 logging.getLogger("absl").setLevel(logging.ERROR)
 
@@ -50,7 +54,7 @@ FONT_SIZE = 20
 font_cn = None
 
 # ESP8266 配置
-ESP_IP = "192.168.0.106"
+ESP_IP = ""
 EMOTION_TO_ESP = {
     "Anger": "ANGRY", "Angry": "ANGRY",
     "Contempt": "HAPPY",
@@ -62,32 +66,91 @@ EMOTION_TO_ESP = {
     "Surprise": "SURPRISE", "Surprised": "SURPRISE",
 }
 
+_zeroconf = None
+
+
+def _get_lan_ip():
+    """获取本机局域网 IP"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+def start_mdns():
+    """广播 liveface.local，让 ESP8266 通过主机名找到本机"""
+    global _zeroconf
+    try:
+        lan_ip = _get_lan_ip()
+        info = ServiceInfo(
+            "_http._tcp.local.",
+            "liveface._http._tcp.local.",
+            addresses=[socket.inet_aton(lan_ip)],
+            port=443,
+            properties={},
+            server=f"liveface-{lan_ip.replace('.', '-')}.local.",
+        )
+        _zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+        _zeroconf.register_service(info)
+        print(f"mDNS advertised: liveface.local -> {lan_ip}:443")
+    except Exception as e:
+        print(f"mDNS 广播失败: {e}")
+
+
+def resolve_esp_ip():
+    """通过 mDNS 解析 esp8266.local -> IP"""
+    global ESP_IP
+    try:
+        zc = Zeroconf(ip_version=IPVersion.V4Only)
+        info = zc.get_service_info("_http._tcp.local.", "esp8266._http._tcp.local.")
+        zc.close()
+        if info and info.addresses:
+            ESP_IP = socket.inet_ntoa(info.addresses[0])
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _probe_esp(ip):
+    try:
+        r = requests.get(f"http://{ip}/esp_ip", timeout=0.3)
+        if r.status_code == 200:
+            return ip
+    except Exception:
+        pass
+    return None
+
 
 def discover_esp():
     global ESP_IP
-    # 尝试从 esp_ip.txt 读取
     ip_file = os.path.join(os.path.dirname(__file__), "esp_ip.txt")
     if os.path.exists(ip_file):
         with open(ip_file) as f:
             ESP_IP = f.read().strip()
             print(f"ESP IP from file: {ESP_IP}")
             return
-    # 尝试通过常见 IP 发现
+    if resolve_esp_ip():
+        print(f"ESP discovered via mDNS: {ESP_IP}")
+        return
     base = "192.168.0."
-    for i in range(100, 120):
-        ip = base + str(i)
-        try:
-            r = requests.get(f"http://{ip}/esp_ip", timeout=0.3)
-            if r.status_code == 200:
-                ESP_IP = ip
-                print(f"ESP discovered at: {ESP_IP}")
-                return
-        except Exception:
-            pass
-    print(f"ESP not found, using default: {ESP_IP}")
+    with ThreadPoolExecutor(max_workers=50) as ex:
+        found = [ip for ip in ex.map(_probe_esp, [base + str(i) for i in range(1, 255)]) if ip]
+    if found:
+        ESP_IP = found[0]
+        print(f"ESP discovered via scan: {ESP_IP}")
+    else:
+        print("ESP 未找到（可手动写入 webapp/esp_ip.txt）")
 
 
 def send_emotion_to_esp(emotion_name):
+    global ESP_IP
+    if not ESP_IP and not resolve_esp_ip():
+        return
     esp_name = EMOTION_TO_ESP.get(emotion_name, "HAPPY")
     try:
         requests.post(
@@ -99,6 +162,7 @@ def send_emotion_to_esp(emotion_name):
         pass
 
 discover_esp()
+start_mdns()
 
 for fp in ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf", "C:/Windows/Fonts/simsun.ttc"]:
     try:
@@ -212,6 +276,56 @@ def generate_frames():
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/analyze", methods=["POST"])
+def api_analyze():
+    """接收浏览器摄像头帧，检测人脸 + 识别表情，返回 JSON 并同步到 ESP8266"""
+    try:
+        data = request.get_json(force=True)
+        img_b64 = data.get("image", "")
+        if not img_b64:
+            return jsonify({"faces": []})
+        img_bytes = base64.b64decode(img_b64)
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    except Exception:
+        return jsonify({"faces": []})
+
+    if frame is None:
+        return jsonify({"faces": []})
+
+    faces_out = []
+    try:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        detection_result = face_detector.detect(mp_image)
+        for det in detection_result.detections:
+            bbox = det.bounding_box
+            x, y = max(0, bbox.origin_x), max(0, bbox.origin_y)
+            bw = min(bbox.width, frame.shape[1] - x)
+            bh = min(bbox.height, frame.shape[0] - y)
+            if bw <= 0 or bh <= 0:
+                continue
+            face_crop = frame[y : y + bh, x : x + bw]
+            if face_crop.size == 0:
+                continue
+            try:
+                labels, probs = model.predict_emotions(face_crop, logits=False)
+                emotion = labels[0]
+            except Exception:
+                emotion = "?"
+            faces_out.append({
+                "box": [x, y, bw, bh],
+                "emotion": EMOTION_TO_ESP.get(emotion, "HAPPY"),
+                "emotion_cn": EMOTION_CN.get(emotion, emotion),
+            })
+            if emotion != "?":
+                send_emotion_to_esp(emotion)
+    except Exception:
+        pass
+
+    return jsonify({"faces": faces_out})
 
 
 @app.route("/video_feed")
