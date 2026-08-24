@@ -38,21 +38,20 @@
 ### 现状
 - 后端广播 `liveface.local` 正常
 - **手机**能解析 `liveface.local` → 正常访问
-- **电脑**浏览器无法解析 `liveface.local`
-- 原因：Windows 对 `.local` mDNS 主机名支持不稳定（原生 mDNS 解析时好时坏）
+- **电脑**浏览器之前无法解析 `liveface.local`
+- 原因：Windows 对 `.local` mDNS 主机名支持不稳定
 
-### 影响评估
-- **实际无影响**，因为：
-  - ESP8266 重定向用的是 **IP**（`https://192.168.0.103`），不是主机名
-  - PC 浏览器直接用 `https://192.168.0.103` 即可访问，不需要 `.local`
-  - `liveface.local` 只被 ESP 的 `MDNS.queryService()` 内部使用（那是 ESP 自己解析，与 Windows 无关）
-- `esp8266.local` 电脑也访问不了，同理——直接用 ESP 的 IP 访问
+### ✅ 已解决 (2026-08-24)
+- 确认 Apple Bonjour 已安装且 `Bonjour Service` 运行中
+- 现在电脑可正常解析：
+  - `Resolve-DnsName liveface.local` → `192.168.0.103` ✅
+  - `https://liveface.local` → HTTP 200 ✅
+- 电脑浏览器可直接访问 `https://liveface.local`
+- 注意：若之前打不开，可能是 DNS 缓存未刷新，或后端当时未在广播
 
-### 彻底解决办法（可选）
+### 历史方案（已不需要）
 | 方案 | 说明 |
 |------|------|
-| 安装 **Apple Bonjour**（Windows） | 系统级稳定支持 `.local` 解析，最可靠 |
-| hosts 文件手动加条目 | `192.168.0.103 liveface.local`，但 IP 变了就要改，违背初衷 |
-| **不处理**（推荐） | 反正用 IP 就行，mDNS 只是 ESP 内部找 PC 用的 |
-
-**状态**: 建议不处理，直接用 IP
+| 安装 **Apple Bonjour**（Windows） | ✅ 已完成（系统已有） |
+| hosts 文件手动加条目 | 不采用 |
+| **不处理** | 已过时 |
