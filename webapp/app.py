@@ -14,6 +14,7 @@ import mediapipe as mp
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image, ImageDraw, ImageFont
 from flask import Flask, render_template, Response, request, jsonify
+from flask_sock import Sock
 from zeroconf import Zeroconf, ServiceInfo, IPVersion
 
 logging.getLogger("absl").setLevel(logging.ERROR)
@@ -25,6 +26,7 @@ from mediapipe.tasks.python.vision import FaceDetector, FaceDetectorOptions, Run
 from mediapipe.tasks.python import BaseOptions
 
 app = Flask(__name__)
+sock = Sock(app)
 
 print("Loading EmotiEffLib model (CUDA)...")
 model = EmotiEffLibRecognizerTorch(model_name="enet_b0_8_best_vgaf", device="cuda")
@@ -282,28 +284,8 @@ def generate_frames():
         yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
 
 
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
-@app.route("/api/analyze", methods=["POST"])
-def api_analyze():
-    """接收浏览器摄像头帧，检测人脸 + 识别表情，返回 JSON 并同步到 ESP8266"""
-    try:
-        data = request.get_json(force=True)
-        img_b64 = data.get("image", "")
-        if not img_b64:
-            return jsonify({"faces": []})
-        img_bytes = base64.b64decode(img_b64)
-        nparr = np.frombuffer(img_bytes, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    except Exception:
-        return jsonify({"faces": []})
-
-    if frame is None:
-        return jsonify({"faces": []})
-
+def analyze_frame(frame):
+    """检测人脸 + 识别表情，返回 faces 列表，并同步到 ESP8266"""
     faces_out = []
     try:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -333,8 +315,51 @@ def api_analyze():
                 send_emotion_to_esp(emotion)
     except Exception:
         pass
+    return faces_out
 
-    return jsonify({"faces": faces_out})
+
+@sock.route("/ws")
+def ws_recognize(ws):
+    """WebSocket 实时识别：浏览器发二进制 JPEG 帧，返回 JSON 表情结果"""
+    import json as _json
+    while True:
+        data = ws.receive()  # 二进制帧
+        if data is None:
+            break
+        try:
+            nparr = np.frombuffer(data, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        except Exception:
+            continue
+        if frame is None:
+            continue
+        faces = analyze_frame(frame)
+        ws.send(_json.dumps({"faces": faces}))
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/api/analyze", methods=["POST"])
+def api_analyze():
+    """预留：接收浏览器摄像头帧（bas64），检测人脸 + 识别表情（WebSocket 为推荐方式）"""
+    try:
+        data = request.get_json(force=True)
+        img_b64 = data.get("image", "")
+        if not img_b64:
+            return jsonify({"faces": []})
+        img_bytes = base64.b64decode(img_b64)
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    except Exception:
+        return jsonify({"faces": []})
+
+    if frame is None:
+        return jsonify({"faces": []})
+
+    return jsonify({"faces": analyze_frame(frame)})
 
 
 @app.route("/video_feed")

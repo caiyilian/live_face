@@ -4,32 +4,21 @@
 
 ## 问题 1: 识别链路效率低（base64 POST 轮询）
 
-### 现状
-- 前端每 400ms 截一帧手机摄像头画面 → canvas → base64 → POST `/api/analyze` → 后端识别 → 返回 JSON
-- 效率问题：
-  - base64 编码把图片体积膨胀约 **33%**
-  - 每帧一次 HTTP 请求/响应，含 TCP 握手开销
-  - JSON 解析 + 响应体往返，增加延迟
-  - 实际帧率有限，实时性差
+### ✅ 已解决 (2026-08-24)
+- 改为 **WebSocket 二进制帧**：
+  - 后端 `flask-sock` 新增 `/ws` 端点，接收二进制 JPEG，逐帧识别，返回 JSON
+  - 前端 `sendFrame()` 用 `canvas.toBlob()` 直接发 JPEG 二进制，省掉 base64（膨胀 33%）和 HTTP 握手
+  - `/api/analyze` 保留作为备用（不再被前端默认使用）
+- 依赖新增：`flask-sock`
+- 前端发送间隔 200ms
 
 ### 业界做法
 | 方案 | 适用场景 | 特点 |
 |------|----------|------|
-| **WebSocket (二进制帧)** | 浏览器 → 后端推理 | 省掉 base64 膨胀和 HTTP 握手，单向持续推送，延迟低 |
+| **WebSocket (二进制帧)** | 浏览器 → 后端推理 | ✅ 当前采用，免 base64 和握手 |
 | **WebRTC** | 直播级实时视频 | 真正视频流级，P2P 传输，实现最复杂 |
-| **MJPEG over HTTP** | 服务端设备摄像头（如我们之前的 PC 摄像头方案） | server push，不适用于手机摄像头 |
+| **MJPEG over HTTP** | 服务端设备摄像头 | server push，不适用于手机摄像头 |
 | **浏览器端跑模型** (MediaPipe/TFLite) | 客户端推理 | 无需后端，但精度/资源受限 |
-
-> 参考：网页直播间和实时 AI 滤镜（如 Google 的 web 摄像头 demo）普遍用 WebSocket 或 WebRTC，不是 base64 POST。
-
-### 建议方案
-改成 **WebSocket**：
-- 前端连接 `ws://`（HTTPS 页面配对用 `wss://`）
-- 每帧以二进制 `Blob`/`ArrayBuffer` 发送 JPEG
-- 后端 `flask-sock` 或 `websockets` 处理，返回 JSON 表情结果
-- 需求：`pip install flask-sock`（或 websockets）
-
-**状态**: 待实现（用户确认后再动手）
 
 ---
 

@@ -54,8 +54,8 @@ const fps = document.getElementById('fps');
 const octx = overlay.getContext('2d');
 let mediaStream = null;
 let isRecognizing = false;
+let ws = null;
 let timer = null;
-let lastFrameTime = 0;
 
 function setOverlaySize() {
   overlay.width = video.videoWidth;
@@ -84,12 +84,28 @@ btnStart.addEventListener('click', () => {
   btnStop.disabled = false;
   btnOpen.disabled = true;
   status.textContent = '表情识别已开启';
-  timer = setInterval(recognizeFrame, 400);
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.binaryType = 'arraybuffer';
+  ws.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      drawFaces(data.faces || []);
+    } catch (err) { /* ignore */ }
+  };
+  ws.onclose = () => {
+    if (isRecognizing) status.textContent = '连接已断开';
+  };
+  ws.onerror = () => { status.textContent = 'WebSocket 连接错误'; };
+
+  timer = setInterval(sendFrame, 200);
 });
 
 btnStop.addEventListener('click', () => {
   isRecognizing = false;
   clearInterval(timer);
+  if (ws) { ws.close(); ws = null; }
   octx.clearRect(0, 0, overlay.width, overlay.height);
   btnStart.disabled = true;
   btnStop.disabled = true;
@@ -98,31 +114,24 @@ btnStop.addEventListener('click', () => {
   fps.textContent = '';
 });
 
-async function recognizeFrame() {
+// 复用的截图 canvas
+const capCanvas = document.createElement('canvas');
+
+function sendFrame() {
   if (!isRecognizing || !mediaStream) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-  // 把当前视频帧画到临时 canvas 并转 base64
-  const temp = document.createElement('canvas');
-  temp.width = video.videoWidth;
-  temp.height = video.videoHeight;
-  const tctx = temp.getContext('2d');
+  // 当前视频帧 → JPEG 二进制 → WebSocket 直接发送（免 base64 膨胀）
+  capCanvas.width = video.videoWidth;
+  capCanvas.height = video.videoHeight;
+  const tctx = capCanvas.getContext('2d');
   tctx.drawImage(video, 0, 0);
-
-  const t0 = performance.now();
-  try {
-    const resp = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: temp.toDataURL('image/jpeg', 0.8).split(',')[1] }),
+  capCanvas.toBlob((blob) => {
+    if (!blob) return;
+    blob.arrayBuffer().then((buf) => {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(buf);
     });
-    const data = await resp.json();
-    drawFaces(data.faces || []);
-    const elapsed = performance.now() - t0;
-    fps.textContent = `约 ${(1000 / elapsed).toFixed(1)} FPS (每次 ${elapsed.toFixed(0)}ms)`;
-  } catch (e) {
-    // 后端未启动或网络错误
-    status.textContent = '识别出错: ' + e.message;
-  }
+  }, 'image/jpeg', 0.8);
 }
 
 function drawFaces(faces) {
