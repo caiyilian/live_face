@@ -196,11 +196,19 @@ void setup() {
   server.on("/emotion", HTTP_POST, []() {
     if (server.hasArg("plain")) {
       String body = server.arg("plain");
-      int s = body.indexOf("\"emotion\":\"") + 10;
-      int e = body.indexOf("\"", s);
-      if (s > 9 && e > s) {
-        currentEmotion = body.substring(s, e);
-        showEmotion(currentEmotion);
+      // 健壮解析：找到 "emotion" 键，跳过冒号和空格，取引号内的值
+      int k = body.indexOf("emotion");
+      if (k >= 0) {
+        int colon = body.indexOf(':', k);
+        int vq = body.indexOf('"', colon);
+        if (vq >= 0) {
+          int start = vq + 1;
+          int end = body.indexOf('"', start);
+          if (end > start) {
+            currentEmotion = body.substring(start, end);
+            showEmotion(currentEmotion);
+          }
+        }
       }
     }
     server.send(200, "application/json", "{\"ok\":true}");
