@@ -112,13 +112,16 @@ IPAddress pcIp(0, 0, 0, 0);
 bool pcResolved = false;
 
 bool resolvePc() {
-  IPAddress ip;
-  if (WiFi.hostByName(PC_HOSTNAME, ip)) {
-    pcIp = ip;
-    pcResolved = true;
-    Serial.print("PC resolved via mDNS: ");
-    Serial.println(ip);
-    return true;
+  // 用 DNS-SD 服务查询找 PC 的 _http._tcp 服务（实例名为 liveface）
+  uint32_t count = MDNS.queryService("http", "tcp");
+  for (uint32_t u = 0; u < count; u++) {
+    if (String(MDNS.answerHostname(u)) == "liveface") {
+      pcIp = MDNS.answerIP(u);
+      pcResolved = true;
+      Serial.print("PC resolved via mDNS: ");
+      Serial.println(pcIp);
+      return true;
+    }
   }
   pcResolved = false;
   Serial.println("PC not resolved via mDNS");

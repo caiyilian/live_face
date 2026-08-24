@@ -92,7 +92,7 @@ def start_mdns():
             addresses=[socket.inet_aton(lan_ip)],
             port=443,
             properties={},
-            server=f"liveface-{lan_ip.replace('.', '-')}.local.",
+            server="liveface.local.",
         )
         _zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
         _zeroconf.register_service(info)
