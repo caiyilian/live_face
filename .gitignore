@@ -56,6 +56,10 @@ esp8266_oled/src/config.h
 # ESP8266 IP 配置
 webapp/esp_ip.txt
 
+# HTTPS 自签名证书（本地生成）
+webapp/cert.pem
+webapp/key.pem
+
 # PlatformIO 编译产物
 esp8266_oled/.pio/
 

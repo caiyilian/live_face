@@ -229,4 +229,10 @@ def stop():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
+    # HTTPS 自签名证书，让局域网设备能使用摄像头（浏览器显示警告后点继续）
+    cert_dir = os.path.dirname(os.path.abspath(__file__))
+    app.run(
+        host="0.0.0.0", port=443,
+        debug=False, threaded=True,
+        ssl_context=(os.path.join(cert_dir, "cert.pem"), os.path.join(cert_dir, "key.pem")),
+    )
