@@ -42,7 +42,7 @@ void drawSad(int cx, int cy) {
   display.drawLine(cx - 14, cy - 14, cx - 7, cy - 9, SSD1306_WHITE);
   display.drawLine(cx + 14, cy - 14, cx + 7, cy - 9, SSD1306_WHITE);
   display.drawCircle(cx, cy + 8, 12, SSD1306_WHITE);
-  display.fillRect(cx - 12, cy - 4, 24, 14, SSD1306_BLACK);
+  display.fillRect(cx - 12, cy + 8, 24, 12, SSD1306_BLACK);
   display.fillCircle(cx - 16, cy, 2, SSD1306_WHITE);
 }
 
@@ -71,7 +71,7 @@ void drawFear(int cx, int cy) {
   display.fillCircle(cx - 10, cy - 8, 2, SSD1306_WHITE);
   display.fillCircle(cx + 10, cy - 8, 2, SSD1306_WHITE);
   display.drawCircle(cx, cy + 6, 7, SSD1306_WHITE);
-  display.fillRect(cx - 7, cy + 6, 14, 7, SSD1306_BLACK);
+  display.fillCircle(cx, cy + 6, 3, SSD1306_BLACK);
   display.drawLine(cx - 12, cy - 18, cx - 9, cy - 14, SSD1306_WHITE);
   display.drawLine(cx + 12, cy - 18, cx + 9, cy - 14, SSD1306_WHITE);
 }

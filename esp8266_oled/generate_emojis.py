@@ -75,7 +75,7 @@ def make_sad():
         leye(d, cx, cy, 5), reye(d, cx, cy, 5),
         brow(d, cx, cy, -14, -14, -7, -9),
         brow(d, cx, cy, +14, -14, +7, -9),
-        mouth_smile(d, cx, cy, 8, 12),  # 当前 ESP8266 代码画的是微笑（bug: 应该是悲伤）
+        mouth_frown(d, cx, cy, 8, 12),
         d.ellipse([cx - 17, cy - 1, cx - 15, cy + 1], fill=1),
     ))
 
@@ -106,7 +106,8 @@ def make_fear():
         loop(d, cx, cy, 6),
         d.ellipse([cx - 10 - 2, cy - 8 - 2, cx - 10 + 2, cy - 8 + 2], fill=1),
         d.ellipse([cx + 10 - 2, cy - 8 - 2, cx + 10 + 2, cy - 8 + 2], fill=1),
-        mouth_open(d, cx, cy, 6, 7),
+        d.ellipse([cx - 7, cy + 6 - 7, cx + 7, cy + 6 + 7], outline=1, width=2),
+        d.ellipse([cx - 3, cy + 6 - 3, cx + 3, cy + 6 + 3], fill=0),
         brow(d, cx, cy, -12, -18, -9, -14),
         brow(d, cx, cy, +12, -18, +9, -14),
     ))
