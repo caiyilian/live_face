@@ -348,8 +348,9 @@ def ws_recognize(ws):
         if frame is None:
             continue
         faces = analyze_frame(frame)
+        h_img, w_img = frame.shape[:2]
         elapsed = (time.perf_counter() - t0) * 1000
-        ws.send(_json.dumps({"faces": faces, "ms": round(elapsed, 1)}))
+        ws.send(_json.dumps({"faces": faces, "w": w_img, "h": h_img, "ms": round(elapsed, 1)}))
 
 
 @app.route("/")

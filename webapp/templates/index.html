@@ -90,7 +90,7 @@ btnStart.addEventListener('click', () => {
   ws.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data);
-      drawFaces(data.faces || []);
+      drawFaces(data.faces || [], data.w, data.h);
       if (data.ms) fps.textContent = `${data.ms.toFixed(0)}ms`;
     } catch (err) { /* ignore */ }
     if (isRecognizing) setTimeout(sendFrame, 40);
@@ -135,10 +135,10 @@ function sendFrame() {
   }, 'image/jpeg', 0.8);
 }
 
-function drawFaces(faces) {
+function drawFaces(faces, imgW, imgH) {
   octx.clearRect(0, 0, overlay.width, overlay.height);
-  const scaleX = overlay.width / video.videoWidth;
-  const scaleY = overlay.height / video.videoHeight;
+  const scaleX = overlay.width / (imgW || video.videoWidth);
+  const scaleY = overlay.height / (imgH || video.videoHeight);
   for (const f of faces) {
     const [x, y, w, h] = f.box;
     const dx = x * scaleX, dy = y * scaleY, dw = w * scaleX, dh = h * scaleY;
